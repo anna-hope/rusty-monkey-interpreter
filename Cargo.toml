@@ -1,0 +1,6 @@
+[workspace]
+
+members = [
+    "imonkey",
+    "imonkey_lib",
+]
