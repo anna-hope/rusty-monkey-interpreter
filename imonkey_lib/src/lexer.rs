@@ -1,4 +1,5 @@
 use crate::token::{lookup_ident, Token, TokenType};
+use std::fmt::format;
 
 #[derive(Debug)]
 pub struct Lexer {
@@ -34,12 +35,40 @@ impl Lexer {
         self.skip_whitespace();
 
         let token = match self.character as char {
-            '=' => Token::new(TokenType::Assign, self.character),
+            '=' => {
+                if self.peek() as char == '=' {
+                    let character = self.character as char;
+                    self.read_char();
+                    Token::new_with_literal(
+                        TokenType::Eq,
+                        format!("{character}{}", self.character as char),
+                    )
+                } else {
+                    Token::new(TokenType::Assign, self.character)
+                }
+            }
+            '+' => Token::new(TokenType::Plus, self.character),
+            '-' => Token::new(TokenType::Minus, self.character),
+            '!' => {
+                if self.peek() as char == '=' {
+                    let character = self.character as char;
+                    self.read_char();
+                    Token::new_with_literal(
+                        TokenType::NotEq,
+                        format!("{character}{}", self.character as char),
+                    )
+                } else {
+                    Token::new(TokenType::Bang, self.character)
+                }
+            }
+            '/' => Token::new(TokenType::Slash, self.character),
+            '*' => Token::new(TokenType::Asterisk, self.character),
+            '<' => Token::new(TokenType::Lt, self.character),
+            '>' => Token::new(TokenType::Gt, self.character),
             ';' => Token::new(TokenType::Semicolon, self.character),
             '(' => Token::new(TokenType::Lparen, self.character),
             ')' => Token::new(TokenType::Rparen, self.character),
             ',' => Token::new(TokenType::Comma, self.character),
-            '+' => Token::new(TokenType::Plus, self.character),
             '{' => Token::new(TokenType::Lbrace, self.character),
             '}' => Token::new(TokenType::Rbrace, self.character),
             '\0' => Token::new(TokenType::Eof, 0),
@@ -82,6 +111,14 @@ impl Lexer {
             self.read_char()
         }
     }
+
+    fn peek(&self) -> u8 {
+        if self.read_position >= self.input.len() {
+            0
+        } else {
+            self.input.as_bytes()[self.read_position]
+        }
+    }
 }
 
 fn is_letter(character: char) -> bool {
@@ -102,6 +139,17 @@ let add = fn(x, y) {
 }
 
 let result = add(five, ten);
+!-/*5;
+5 < 10 > 5;
+
+if (5 < 10) {
+    return true;
+} else {
+    return false;
+}
+
+10 == 10; 
+10 != 9;
 "#;
         let mut lexer = Lexer::new(input.to_string());
 
@@ -140,6 +188,43 @@ let result = add(five, ten);
             (TokenType::Comma, ","),
             (TokenType::Ident, "ten"),
             (TokenType::Rparen, ")"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::Bang, "!"),
+            (TokenType::Minus, "-"),
+            (TokenType::Slash, "/"),
+            (TokenType::Asterisk, "*"),
+            (TokenType::Int, "5"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::Int, "5"),
+            (TokenType::Lt, "<"),
+            (TokenType::Int, "10"),
+            (TokenType::Gt, ">"),
+            (TokenType::Int, "5"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::If, "if"),
+            (TokenType::Lparen, "("),
+            (TokenType::Int, "5"),
+            (TokenType::Lt, "<"),
+            (TokenType::Int, "10"),
+            (TokenType::Rparen, ")"),
+            (TokenType::Lbrace, "{"),
+            (TokenType::Return, "return"),
+            (TokenType::True, "true"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::Rbrace, "}"),
+            (TokenType::Else, "else"),
+            (TokenType::Lbrace, "{"),
+            (TokenType::Return, "return"),
+            (TokenType::False, "false"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::Rbrace, "}"),
+            (TokenType::Int, "10"),
+            (TokenType::Eq, "=="),
+            (TokenType::Int, "10"),
+            (TokenType::Semicolon, ";"),
+            (TokenType::Int, "10"),
+            (TokenType::NotEq, "!="),
+            (TokenType::Int, "9"),
             (TokenType::Semicolon, ";"),
             (TokenType::Eof, "\0"),
         ];

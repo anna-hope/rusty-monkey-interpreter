@@ -1,12 +1,18 @@
-use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::fmt::Formatter;
+
+use lazy_static::lazy_static;
 
 lazy_static! {
     static ref KEYWORDS: HashMap<String, TokenType> = {
         let mut m = HashMap::new();
         m.insert("fn".to_string(), TokenType::Function);
         m.insert("let".to_string(), TokenType::Let);
+        m.insert("true".to_string(), TokenType::True);
+        m.insert("false".to_string(), TokenType::False);
+        m.insert("if".to_string(), TokenType::If);
+        m.insert("else".to_string(), TokenType::Else);
+        m.insert("return".to_string(), TokenType::Return);
         m
     };
 }
@@ -23,6 +29,13 @@ pub enum TokenType {
     // Operators
     Assign,
     Plus,
+    Minus,
+    Bang,
+    Asterisk,
+    Slash,
+
+    Lt,
+    Gt,
 
     // Delimiters
     Comma,
@@ -36,6 +49,14 @@ pub enum TokenType {
     // Keywords
     Function,
     Let,
+    True,
+    False,
+    If,
+    Else,
+    Return,
+
+    Eq,
+    NotEq,
 }
 
 impl std::fmt::Display for TokenType {
@@ -47,6 +68,12 @@ impl std::fmt::Display for TokenType {
             TokenType::Int => "INT",
             TokenType::Assign => "=",
             TokenType::Plus => "+",
+            TokenType::Minus => "/",
+            TokenType::Bang => "!",
+            TokenType::Asterisk => "*",
+            TokenType::Slash => "/",
+            TokenType::Lt => "<",
+            TokenType::Gt => ">",
             TokenType::Comma => ",",
             TokenType::Semicolon => ";",
             TokenType::Lparen => "(",
@@ -55,6 +82,13 @@ impl std::fmt::Display for TokenType {
             TokenType::Rbrace => "}",
             TokenType::Function => "FUNCTION",
             TokenType::Let => "LET",
+            TokenType::True => "TRUE",
+            TokenType::False => "FALSE",
+            TokenType::If => "IF",
+            TokenType::Else => "ELSE",
+            TokenType::Return => "RETURN",
+            TokenType::Eq => "==",
+            TokenType::NotEq => "!=",
         }
         .to_string();
         write!(f, "{string}")
