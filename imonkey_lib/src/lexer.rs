@@ -1,5 +1,4 @@
 use crate::token::{lookup_ident, Token, TokenType};
-use std::fmt::format;
 
 #[derive(Debug)]
 pub struct Lexer {
@@ -117,6 +116,19 @@ impl Lexer {
             0
         } else {
             self.input.as_bytes()[self.read_position]
+        }
+    }
+}
+
+impl Iterator for Lexer {
+    type Item = Token;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let token = self.next_token();
+        if token.token_type != TokenType::Eof {
+            Some(token)
+        } else {
+            None
         }
     }
 }
