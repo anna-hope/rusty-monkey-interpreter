@@ -1,4 +1,4 @@
-use imonkey_lib::prelude::Lexer;
+use monkey_lib::prelude::Lexer;
 use std::io::{self, Write};
 
 const PROMPT: &str = ">> ";
