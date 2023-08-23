@@ -2,6 +2,6 @@
 
 members = [
     "monkey",
-    "monkey_lib",
+    "interpreter",
     "repl",
 ]

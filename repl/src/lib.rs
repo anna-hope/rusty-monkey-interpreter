@@ -1,5 +1,6 @@
-use monkey_lib::prelude::Lexer;
 use std::io::{self, Write};
+
+use interpreter::prelude::Lexer;
 
 const PROMPT: &str = ">> ";
 

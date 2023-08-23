@@ -3,6 +3,13 @@
 version = 3
 
 [[package]]
+name = "interpreter"
+version = "0.1.0"
+dependencies = [
+ "lazy_static",
+]
+
+[[package]]
 name = "lazy_static"
 version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -16,15 +23,8 @@ dependencies = [
 ]
 
 [[package]]
-name = "monkey_lib"
-version = "0.1.0"
-dependencies = [
- "lazy_static",
-]
-
-[[package]]
 name = "repl"
 version = "0.1.0"
 dependencies = [
- "monkey_lib",
+ "interpreter",
 ]
