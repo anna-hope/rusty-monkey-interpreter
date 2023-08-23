@@ -37,6 +37,20 @@ impl Parser {
         self.peek_token = self.lexer.next_token();
     }
 
+    fn expect_peek(&mut self, token_type: TokenType) -> Result<()> {
+        if self.peek_token.token_type == token_type {
+            self.advance();
+            Ok(())
+        } else {
+            let message = format!(
+                "expected next token to be {}, got {} instead",
+                token_type, self.peek_token.token_type
+            );
+            self.errors.push(message.clone());
+            Err(ParserError::Error(message))
+        }
+    }
+
     pub fn parse_program(&mut self) -> Program {
         let mut program = Program::new();
 
@@ -53,6 +67,7 @@ impl Parser {
     fn parse_statement(&mut self) -> Option<Statement> {
         match self.current_token.token_type {
             TokenType::Let => self.parse_let_statement(),
+            TokenType::Return => Some(self.parse_return_statement()),
             _ => None,
         }
     }
@@ -84,18 +99,17 @@ impl Parser {
         })
     }
 
-    fn expect_peek(&mut self, token_type: TokenType) -> Result<()> {
-        if self.peek_token.token_type == token_type {
+    fn parse_return_statement(&mut self) -> Statement {
+        let token = self.current_token.clone();
+        self.advance();
+
+        // TODO: We're skipping the expressions until we
+        // encounter a semicolon.
+        while self.current_token.token_type != TokenType::Semicolon {
             self.advance();
-            Ok(())
-        } else {
-            let message = format!(
-                "expected next token to be {}, got {} instead",
-                token_type, self.peek_token.token_type
-            );
-            self.errors.push(message.clone());
-            Err(ParserError::Error(message))
         }
+
+        Statement::Return { token, value: None }
     }
 }
 
@@ -103,17 +117,6 @@ impl Parser {
 mod tests {
     use super::*;
     use crate::ast::{Node, Statement};
-
-    // Adapted from
-    // https://users.rust-lang.org/t/checking-for-an-enum-variant/51558/9
-    macro_rules! is_of_var {
-        ($val:ident, $var:path) => {
-            match $val {
-                $var { .. } => true,
-                _ => false,
-            }
-        };
-    }
 
     #[test]
     fn let_statements() {
@@ -175,5 +178,36 @@ let 838383;
         }
 
         true
+    }
+
+    #[test]
+    fn return_statements() {
+        let input = r#"
+return 5;
+return 10;
+return 993322;
+"#;
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+
+        let program = parser.parse_program();
+        let had_errors = check_errors(&parser);
+
+        assert!(!had_errors);
+
+        assert_eq!(
+            program.statements.len(),
+            3,
+            "Program should contain 3 statements"
+        );
+
+        for statement in program.statements {
+            match statement {
+                Statement::Return { .. } => {
+                    assert_eq!(statement.token_literal(), "return".to_string());
+                }
+                _ => panic!("Expected Statement::Return, got {statement:?}"),
+            }
+        }
     }
 }

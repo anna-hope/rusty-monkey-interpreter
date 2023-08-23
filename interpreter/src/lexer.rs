@@ -38,50 +38,50 @@ impl Lexer {
                 if self.peek() as char == '=' {
                     let character = self.character as char;
                     self.read_char();
-                    Token::new_with_literal(
+                    Token::new(
                         TokenType::Eq,
                         format!("{character}{}", self.character as char),
                     )
                 } else {
-                    Token::new(TokenType::Assign, self.character)
+                    Token::new_with_character(TokenType::Assign, self.character)
                 }
             }
-            '+' => Token::new(TokenType::Plus, self.character),
-            '-' => Token::new(TokenType::Minus, self.character),
+            '+' => Token::new_with_character(TokenType::Plus, self.character),
+            '-' => Token::new_with_character(TokenType::Minus, self.character),
             '!' => {
                 if self.peek() as char == '=' {
                     let character = self.character as char;
                     self.read_char();
-                    Token::new_with_literal(
+                    Token::new(
                         TokenType::NotEq,
                         format!("{character}{}", self.character as char),
                     )
                 } else {
-                    Token::new(TokenType::Bang, self.character)
+                    Token::new_with_character(TokenType::Bang, self.character)
                 }
             }
-            '/' => Token::new(TokenType::Slash, self.character),
-            '*' => Token::new(TokenType::Asterisk, self.character),
-            '<' => Token::new(TokenType::Lt, self.character),
-            '>' => Token::new(TokenType::Gt, self.character),
-            ';' => Token::new(TokenType::Semicolon, self.character),
-            '(' => Token::new(TokenType::Lparen, self.character),
-            ')' => Token::new(TokenType::Rparen, self.character),
-            ',' => Token::new(TokenType::Comma, self.character),
-            '{' => Token::new(TokenType::Lbrace, self.character),
-            '}' => Token::new(TokenType::Rbrace, self.character),
-            '\0' => Token::new(TokenType::Eof, 0),
+            '/' => Token::new_with_character(TokenType::Slash, self.character),
+            '*' => Token::new_with_character(TokenType::Asterisk, self.character),
+            '<' => Token::new_with_character(TokenType::Lt, self.character),
+            '>' => Token::new_with_character(TokenType::Gt, self.character),
+            ';' => Token::new_with_character(TokenType::Semicolon, self.character),
+            '(' => Token::new_with_character(TokenType::Lparen, self.character),
+            ')' => Token::new_with_character(TokenType::Rparen, self.character),
+            ',' => Token::new_with_character(TokenType::Comma, self.character),
+            '{' => Token::new_with_character(TokenType::Lbrace, self.character),
+            '}' => Token::new_with_character(TokenType::Rbrace, self.character),
+            '\0' => Token::new_with_character(TokenType::Eof, 0),
             _ => {
                 if is_letter(self.character as char) {
                     let literal = self.read_identifier();
                     let token_type = lookup_ident(&literal);
-                    return Token::new_with_literal(token_type, literal);
+                    return Token::new(token_type, literal);
                 } else if self.character.is_ascii_digit() {
                     let token_type = TokenType::Int;
                     let literal = self.read_number();
-                    return Token::new_with_literal(token_type, literal);
+                    return Token::new(token_type, literal);
                 } else {
-                    Token::new(TokenType::Illegal, self.character)
+                    Token::new_with_character(TokenType::Illegal, self.character)
                 }
             }
         };

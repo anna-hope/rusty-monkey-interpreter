@@ -102,7 +102,7 @@ pub struct Token {
 }
 
 impl Token {
-    pub fn new(token_type: TokenType, character: u8) -> Self {
+    pub fn new_with_character(token_type: TokenType, character: u8) -> Self {
         Self {
             token_type,
             literal: (char::from(character)).to_string(),
@@ -110,7 +110,7 @@ impl Token {
     }
 
     /// Constructs a new Token with token_type Ident and the given String literal.
-    pub fn new_with_literal(token_type: TokenType, literal: String) -> Self {
+    pub fn new(token_type: TokenType, literal: String) -> Self {
         Self {
             token_type,
             literal,
