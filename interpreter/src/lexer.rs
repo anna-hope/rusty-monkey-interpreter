@@ -33,7 +33,7 @@ impl Lexer {
     pub fn next_token(&mut self) -> Token {
         self.skip_whitespace();
 
-        let token = match self.character as char {
+        let token = match self.character.into() {
             '=' => {
                 if self.peek() as char == '=' {
                     let character = self.character as char;
@@ -91,7 +91,7 @@ impl Lexer {
 
     fn read_identifier(&mut self) -> String {
         let position = self.position;
-        while is_letter(self.character as char) {
+        while is_letter(self.character.into()) {
             self.read_char();
         }
         self.input[position..self.position].to_string()

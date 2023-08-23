@@ -105,7 +105,7 @@ impl Token {
     pub fn new(token_type: TokenType, character: u8) -> Self {
         Self {
             token_type,
-            literal: (character as char).to_string(),
+            literal: (char::from(character)).to_string(),
         }
     }
 
