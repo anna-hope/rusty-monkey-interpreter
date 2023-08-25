@@ -1,3 +1,4 @@
+use std::any::Any;
 use std::fmt::{Debug, Display, Formatter};
 
 use crate::token::Token;
@@ -16,6 +17,10 @@ impl Debug for dyn Node {
 
 pub trait Expression: Node {
     fn expression(&self);
+
+    /// This is needed primarily for testing that the expression
+    /// was parsed into the expected type.
+    fn as_any(&self) -> &dyn Any;
 }
 
 impl Debug for dyn Expression {
@@ -112,6 +117,42 @@ impl Node for Identifier {
 
 impl Expression for Identifier {
     fn expression(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct IntegerLiteral {
+    pub token: Token,
+    pub value: i64,
+}
+
+impl IntegerLiteral {
+    pub fn new(token: Token, value: i64) -> Self {
+        Self { token, value }
+    }
+}
+
+impl Display for IntegerLiteral {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.value)
+    }
+}
+
+impl Node for IntegerLiteral {
+    fn token_literal(&self) -> String {
+        self.token.literal.to_owned()
+    }
+}
+
+impl Expression for IntegerLiteral {
+    fn expression(&self) {}
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
 }
 
 pub struct Program {

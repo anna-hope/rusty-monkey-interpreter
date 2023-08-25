@@ -1,6 +1,7 @@
+use std::collections::HashMap;
 use thiserror::Error;
 
-use crate::ast::{Identifier, Program, Statement};
+use crate::ast::{Expression, Identifier, IntegerLiteral, Program, Statement};
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
 
@@ -12,11 +13,28 @@ pub enum ParserError {
 
 pub type Result<T> = std::result::Result<T, ParserError>;
 
+type PrefixParseFn = fn(&Parser) -> Result<Box<dyn Expression>>;
+type InfixParseFn = fn(&Parser, Box<dyn Expression>) -> Result<Box<dyn Expression>>;
+
+#[derive(Debug, PartialOrd, PartialEq)]
+enum Precedence {
+    Lowest,
+    Equals,
+    LessGreater,
+    Sum,
+    Product,
+    Prefix,
+    Call,
+}
+
 pub struct Parser {
     lexer: Lexer,
     current_token: Token,
     peek_token: Token,
     errors: Vec<String>,
+
+    prefix_parse_fns: HashMap<TokenType, PrefixParseFn>,
+    infix_parse_fns: HashMap<TokenType, InfixParseFn>,
 }
 
 impl Parser {
@@ -24,11 +42,17 @@ impl Parser {
         let current_token = lexer.next_token();
         let peek_token = lexer.next_token();
 
+        let mut prefix_parse_fns: HashMap<TokenType, PrefixParseFn> = HashMap::new();
+        prefix_parse_fns.insert(TokenType::Ident, Self::parse_identifier);
+        prefix_parse_fns.insert(TokenType::Int, Self::parse_integer_literal);
+
         Self {
             lexer,
             current_token,
             peek_token,
             errors: vec![],
+            prefix_parse_fns,
+            infix_parse_fns: HashMap::new(),
         }
     }
 
@@ -68,7 +92,7 @@ impl Parser {
         match self.current_token.token_type {
             TokenType::Let => self.parse_let_statement(),
             TokenType::Return => Some(self.parse_return_statement()),
-            _ => None,
+            _ => self.parse_expression_statement(),
         }
     }
 
@@ -103,20 +127,65 @@ impl Parser {
         let token = self.current_token.clone();
         self.advance();
 
-        // TODO: We're skipping the expressions until we
-        // encounter a semicolon.
+        // TODO: We're skipping the expressions until we encounter a semicolon.
         while self.current_token.token_type != TokenType::Semicolon {
             self.advance();
         }
 
         Statement::Return { token, value: None }
     }
+
+    fn parse_expression_statement(&mut self) -> Option<Statement> {
+        let token = self.current_token.clone();
+        let expression = self.parse_expression(Precedence::Lowest);
+
+        if self.peek_token.token_type == TokenType::Semicolon {
+            self.advance();
+        }
+        let statement = Statement::Expression { token, expression };
+        Some(statement)
+    }
+
+    fn parse_expression(&mut self, precedence: Precedence) -> Option<Box<dyn Expression>> {
+        if let Some(prefix) = self.prefix_parse_fns.get(&self.current_token.token_type) {
+            let maybe_left_expression = prefix(self);
+            if let Ok(left_expression) = maybe_left_expression {
+                Some(left_expression)
+            } else {
+                let error_message = maybe_left_expression.unwrap_err().to_string();
+                self.errors.push(error_message);
+                None
+            }
+        } else {
+            None
+        }
+    }
+
+    pub fn register_infix(&mut self, token_type: TokenType, function: InfixParseFn) {
+        self.infix_parse_fns.insert(token_type, function);
+    }
+
+    fn parse_identifier(&self) -> Result<Box<dyn Expression>> {
+        Ok(Box::new(Identifier::new(
+            self.current_token.clone(),
+            self.current_token.literal.clone(),
+        )))
+    }
+
+    fn parse_integer_literal(&self) -> Result<Box<dyn Expression>> {
+        let token = self.current_token.clone();
+        let value = token
+            .literal
+            .parse::<i64>()
+            .map_err(|error| ParserError::Error(error.to_string()))?;
+        Ok(Box::new(IntegerLiteral::new(token, value)))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ast::{Node, Statement};
+    use crate::ast::{IntegerLiteral, Node, Statement};
 
     #[test]
     fn let_statements() {
@@ -208,6 +277,71 @@ return 993322;
                 }
                 _ => panic!("Expected Statement::Return, got {statement:?}"),
             }
+        }
+    }
+
+    #[test]
+    fn identifier_expression() {
+        let input = "foobar;";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+
+        let program = parser.parse_program();
+        let had_errors = check_errors(&parser);
+
+        assert!(!had_errors);
+
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "program should have 1 statement"
+        );
+
+        match &program.statements[0] {
+            Statement::Expression { token, expression } => {
+                let expression = expression.as_ref().expect("Expression should not be None");
+                if let Some(identifier) = expression.as_any().downcast_ref::<Identifier>() {
+                    assert_eq!(identifier.value, "foobar".to_string());
+                    assert_eq!(identifier.token_literal(), "foobar".to_string());
+                } else {
+                    panic!("expression must be an identifier");
+                }
+            }
+            _ => panic!("Unexpected Statement variant"),
+        }
+    }
+
+    #[test]
+    fn integer_literal_expression() {
+        let input = "5;";
+        let lexer = Lexer::new(input.to_string());
+        let mut parser = Parser::new(lexer);
+
+        let program = parser.parse_program();
+        let had_errors = check_errors(&parser);
+
+        assert!(!had_errors);
+
+        assert_eq!(
+            program.statements.len(),
+            1,
+            "program should have 1 statement"
+        );
+
+        match &program.statements[0] {
+            Statement::Expression {
+                token: _token,
+                expression,
+            } => {
+                let expression = expression.as_ref().expect("Expression should not be None");
+                if let Some(identifier) = expression.as_any().downcast_ref::<IntegerLiteral>() {
+                    assert_eq!(identifier.value, 5);
+                    assert_eq!(identifier.token_literal(), "5".to_string());
+                } else {
+                    panic!("expression must be an identifier");
+                }
+            }
+            _ => panic!("Unexpected Statement variant"),
         }
     }
 }
