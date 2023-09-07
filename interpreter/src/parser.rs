@@ -84,7 +84,7 @@ pub struct Parser {
     lexer: Lexer,
     current_token: Token,
     peek_token: Token,
-    errors: Vec<String>,
+    pub errors: Vec<String>,
 }
 
 impl Parser {
@@ -127,8 +127,9 @@ impl Parser {
         let mut program = Program::new();
 
         while self.current_token.token_type != TokenType::Eof {
-            if let Ok(statement) = self.parse_statement() {
-                program.statements.push(statement);
+            match self.parse_statement() {
+                Ok(statement) => program.statements.push(statement),
+                Err(error) => self.add_error(error.to_string()),
             }
             self.advance();
         }
@@ -572,6 +573,7 @@ let 838383;
         let _program = parser.parse_program();
         let had_errors = has_errors(&parser);
         assert!(had_errors);
+        assert_eq!(parser.errors.len(), 4);
     }
 
     fn has_errors(parser: &Parser) -> bool {
@@ -740,7 +742,7 @@ let 838383;
             ("false == false", &false, "==", &false),
         ];
 
-        for (input, left_value, operator, right_value) in infix_tests {
+        for (input, left_value, expected_operator, right_value) in infix_tests {
             let lexer = Lexer::new(input.to_string());
             let mut parser = Parser::new(lexer);
             let program = parser.parse_program();
@@ -761,9 +763,17 @@ let 838383;
                 } => {
                     let expression = expression.as_ref().unwrap();
                     match expression {
-                        Expression::Infix { left, right, .. } => {
+                        Expression::Infix {
+                            left,
+                            right,
+                            operator,
+                            ..
+                        } => {
                             let statement_left = left.as_ref().unwrap().as_ref();
                             test_literal_expression(statement_left, *left_value);
+
+                            assert_eq!(operator, expected_operator);
+
                             let statement_right = right.as_ref().unwrap().as_ref();
                             test_literal_expression(statement_right, *right_value);
                         }
