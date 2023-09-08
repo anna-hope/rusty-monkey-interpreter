@@ -76,9 +76,6 @@ lazy_static! {
         m.insert(TokenType::Lparen, Precedence::Call);
         m
     };
-}
-
-lazy_static! {
     static ref PREFIX_PARSE_FNS: HashMap<TokenType, PrefixParseFn> = {
         let mut m: HashMap<TokenType, PrefixParseFn> = HashMap::new();
         m.insert(TokenType::Ident, Parser::parse_identifier);
@@ -92,9 +89,6 @@ lazy_static! {
         m.insert(TokenType::Function, Parser::parse_function_literal);
         m
     };
-}
-
-lazy_static! {
     static ref INFIX_PARSE_FNS: HashMap<TokenType, InfixParseFn> = {
         let mut m: HashMap<TokenType, InfixParseFn> = HashMap::new();
         m.insert(TokenType::Plus, Parser::parse_infix_expression);
