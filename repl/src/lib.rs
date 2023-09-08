@@ -15,14 +15,9 @@ pub fn start() -> io::Result<()> {
         let lexer = Lexer::new(buffer);
         let mut parser = Parser::new(lexer);
 
-        let program = parser.parse_program();
-        if !parser.errors.is_empty() {
-            for error in parser.errors.iter() {
-                println!("\t{error}");
-            }
-            continue;
+        match parser.parse_program() {
+            Ok(program) => println!("{program}"),
+            Err(error) => println!("{error}"),
         }
-
-        println!("{program}");
     }
 }

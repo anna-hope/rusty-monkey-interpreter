@@ -1,5 +1,8 @@
 use std::collections::HashMap;
+use std::error;
+use std::fmt;
 use std::num::ParseIntError;
+use std::result;
 
 use lazy_static::lazy_static;
 use thiserror::Error;
@@ -8,8 +11,28 @@ use crate::ast::{BlockStatement, Expression, Identifier, Program, Statement};
 use crate::lexer::Lexer;
 use crate::token::{Token, TokenType};
 
-#[derive(Debug, Error)]
-pub enum ParserError {
+#[derive(Debug, Clone)]
+pub struct ParserError(Vec<String>);
+
+impl fmt::Display for ParserError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut string = String::new();
+        let errors = &self.0;
+        for (index, error) in errors.iter().enumerate() {
+            string.push('\t');
+            string.push_str(error);
+            if index < errors.len() - 1 {
+                string.push('\n');
+            }
+        }
+        write!(f, "{string}")
+    }
+}
+
+impl error::Error for ParserError {}
+
+#[derive(Error, Debug)]
+enum ErrorRepr {
     #[error("Error parsing if condition: {0}")]
     IfCondition(String),
 
@@ -23,7 +46,7 @@ pub enum ParserError {
     Error(String),
 }
 
-pub type Result<T> = std::result::Result<T, ParserError>;
+type Result<T> = result::Result<T, ErrorRepr>;
 
 type PrefixParseFn = fn(&mut Parser) -> Result<Expression>;
 type InfixParseFn = fn(&mut Parser, &Expression) -> Result<Expression>;
@@ -91,7 +114,7 @@ pub struct Parser {
     lexer: Lexer,
     current_token: Token,
     peek_token: Token,
-    pub errors: Vec<String>,
+    errors: Vec<String>,
 }
 
 impl Parser {
@@ -126,11 +149,11 @@ impl Parser {
                 "expected next token to be {}, got {} instead",
                 token_type, self.peek_token.token_type
             );
-            Err(ParserError::Error(msg))
+            Err(ErrorRepr::Error(msg))
         }
     }
 
-    pub fn parse_program(&mut self) -> Program {
+    pub fn parse_program(&mut self) -> result::Result<Program, ParserError> {
         let mut program = Program::new();
 
         while self.current_token.token_type != TokenType::Eof {
@@ -141,7 +164,11 @@ impl Parser {
             self.advance();
         }
 
-        program
+        if self.errors.is_empty() {
+            Ok(program)
+        } else {
+            Err(ParserError(self.errors.clone()))
+        }
     }
 
     fn parse_statement(&mut self) -> Result<Statement> {
@@ -215,7 +242,7 @@ impl Parser {
                 "No prefix parse function found for {}",
                 self.current_token.token_type
             );
-            Err(ParserError::MissingParseFunction(msg))
+            Err(ErrorRepr::MissingParseFunction(msg))
         }
     }
 
@@ -300,7 +327,7 @@ impl Parser {
         let condition = self
             .parse_expression(Precedence::Lowest)
             .map(Box::new)
-            .map_err(|error| ParserError::IfCondition(error.to_string()))?;
+            .map_err(|error| ErrorRepr::IfCondition(error.to_string()))?;
 
         self.expect_peek(TokenType::Rparen)?;
         self.expect_peek(TokenType::Lbrace)?;
@@ -523,9 +550,7 @@ mod tests {
             let lexer = Lexer::new(input.to_string());
             let mut parser = Parser::new(lexer);
 
-            let program = parser.parse_program();
-            let had_errors = has_errors(&parser);
-            assert!(!had_errors);
+            let program = parser.parse_program().unwrap();
 
             assert_eq!(program.statements.len(), 1);
 
@@ -548,23 +573,10 @@ let 838383;
         let lexer = Lexer::new(input.to_string());
         let mut parser = Parser::new(lexer);
 
-        let _program = parser.parse_program();
-        let had_errors = has_errors(&parser);
-        assert!(had_errors);
-        assert_eq!(parser.errors.len(), 4);
-    }
-
-    fn has_errors(parser: &Parser) -> bool {
-        if parser.errors.is_empty() {
-            return false;
+        let ParserError(errors) = parser.parse_program().unwrap_err();
+        for error in errors.iter() {
+            eprintln!("{error}");
         }
-
-        eprintln!("parser has {} errors", parser.errors.len());
-        for error in parser.errors.iter() {
-            eprintln!("parser error: {error}")
-        }
-
-        true
     }
 
     #[test]
@@ -579,10 +591,7 @@ let 838383;
             let lexer = Lexer::new(input.to_string());
             let mut parser = Parser::new(lexer);
 
-            let program = parser.parse_program();
-            let had_errors = has_errors(&parser);
-
-            assert!(!had_errors);
+            let program = parser.parse_program().unwrap();
 
             assert_eq!(program.statements.len(), 1,);
 
@@ -603,10 +612,7 @@ let 838383;
         let lexer = Lexer::new(input.to_string());
         let mut parser = Parser::new(lexer);
 
-        let program = parser.parse_program();
-        let had_errors = has_errors(&parser);
-
-        assert!(!had_errors);
+        let program = parser.parse_program().unwrap();
 
         assert_eq!(
             program.statements.len(),
@@ -632,10 +638,7 @@ let 838383;
         let lexer = Lexer::new(input.to_string());
         let mut parser = Parser::new(lexer);
 
-        let program = parser.parse_program();
-        let had_errors = has_errors(&parser);
-
-        assert!(!had_errors);
+        let program = parser.parse_program().unwrap();
 
         assert_eq!(
             program.statements.len(),
@@ -667,16 +670,9 @@ let 838383;
         for (input, expected_operator, expected_value) in prefix_tests {
             let lexer = Lexer::new(input.to_string());
             let mut parser = Parser::new(lexer);
-            let program = parser.parse_program();
-            assert!(!has_errors(&parser));
+            let program = parser.parse_program().unwrap();
 
-            assert_eq!(
-                program.statements.len(),
-                1,
-                "Expected program to have {} statements, got {}",
-                1,
-                program.statements.len()
-            );
+            assert_eq!(program.statements.len(), 1,);
 
             match &program.statements[0] {
                 Statement::ExpressionStatement { expression, .. } => match expression {
@@ -712,16 +708,9 @@ let 838383;
         for (input, left_value, expected_operator, right_value) in infix_tests {
             let lexer = Lexer::new(input.to_string());
             let mut parser = Parser::new(lexer);
-            let program = parser.parse_program();
-            assert!(!has_errors(&parser));
+            let program = parser.parse_program().unwrap();
 
-            assert_eq!(
-                program.statements.len(),
-                1,
-                "expected program to have {} statements, got {}",
-                1,
-                program.statements.len()
-            );
+            assert_eq!(program.statements.len(), 1,);
 
             match &program.statements[0] {
                 Statement::ExpressionStatement {
@@ -790,9 +779,7 @@ let 838383;
         for (input, expected) in tests {
             let lexer = Lexer::new(input.to_string());
             let mut parser = Parser::new(lexer);
-            let program = parser.parse_program();
-
-            assert!(!has_errors(&parser));
+            let program = parser.parse_program().unwrap();
 
             let actual = program.to_string();
             assert_eq!(actual, expected);
@@ -806,16 +793,9 @@ let 838383;
         for (input, expected) in tests {
             let lexer = Lexer::new(input.to_string());
             let mut parser = Parser::new(lexer);
-            let program = parser.parse_program();
-            assert!(!has_errors(&parser));
+            let program = parser.parse_program().unwrap();
 
-            assert_eq!(
-                program.statements.len(),
-                1,
-                "Expected program to have {} statements, got {}",
-                1,
-                program.statements.len()
-            );
+            assert_eq!(program.statements.len(), 1,);
 
             match &program.statements[0] {
                 Statement::ExpressionStatement { expression, .. } => match expression {
@@ -834,8 +814,7 @@ let 838383;
         let input = "if (x < y) { x }";
         let lexer = Lexer::new(input.to_string());
         let mut parser = Parser::new(lexer);
-        let program = parser.parse_program();
-        assert!(!has_errors(&parser));
+        let program = parser.parse_program().unwrap();
 
         assert_eq!(program.statements.len(), 1);
 
@@ -874,9 +853,7 @@ let 838383;
         let input = "if (x < y) { x } else { y }";
         let lexer = Lexer::new(input.to_string());
         let mut parser = Parser::new(lexer);
-        let program = parser.parse_program();
-        assert!(!has_errors(&parser));
-
+        let program = parser.parse_program().unwrap();
         assert_eq!(program.statements.len(), 1);
     }
 
@@ -885,8 +862,7 @@ let 838383;
         let input = "fn (x, y) { x + y; }";
         let lexer = Lexer::new(input.to_string());
         let mut parser = Parser::new(lexer);
-        let program = parser.parse_program();
-        assert!(!has_errors(&parser));
+        let program = parser.parse_program().unwrap();
 
         assert_eq!(program.statements.len(), 1);
 
@@ -935,8 +911,7 @@ let 838383;
         for (input, expected_params) in tests {
             let lexer = Lexer::new(input.to_string());
             let mut parser = Parser::new(lexer);
-            let program = parser.parse_program();
-            assert!(!has_errors(&parser));
+            let program = parser.parse_program().unwrap();
 
             match &program.statements[0] {
                 Statement::ExpressionStatement { expression, .. } => match expression {
@@ -960,8 +935,7 @@ let 838383;
         let input = "add(1, 2 * 3, 4 + 5);";
         let lexer = Lexer::new(input.to_string());
         let mut parser = Parser::new(lexer);
-        let program = parser.parse_program();
-        assert!(!has_errors(&parser));
+        let program = parser.parse_program().unwrap();
 
         assert_eq!(program.statements.len(), 1);
 
