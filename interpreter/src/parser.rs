@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::num::ParseIntError;
 
 use lazy_static::lazy_static;
 use thiserror::Error;
@@ -14,6 +15,9 @@ pub enum ParserError {
 
     #[error("Missing parse function: {0}")]
     MissingParseFunction(String),
+
+    #[error("Error parsing integer: {0}")]
+    ParseInt(#[from] ParseIntError),
 
     #[error("{0}")]
     Error(String),
@@ -224,10 +228,7 @@ impl Parser {
 
     fn parse_integer_literal(&mut self) -> Result<Expression> {
         let token = self.current_token.clone();
-        let value = token
-            .literal
-            .parse::<i64>()
-            .map_err(|error| ParserError::Error(error.to_string()))?;
+        let value = token.literal.parse::<i64>()?;
         Ok(Expression::IntegerLiteral { token, value })
     }
 
