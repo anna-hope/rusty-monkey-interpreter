@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 
-use interpreter::prelude::{Lexer, Parser};
+use interpreter::prelude::{eval_program, Lexer, Parser};
 
 const PROMPT: &str = ">> ";
 
@@ -16,7 +16,10 @@ pub fn start() -> io::Result<()> {
         let mut parser = Parser::new(lexer);
 
         match parser.parse_program() {
-            Ok(program) => println!("{program}"),
+            Ok(program) => {
+                let evaluated = eval_program(&program);
+                println!("{}", evaluated.inspect());
+            }
             Err(error) => println!("{error}"),
         }
     }
