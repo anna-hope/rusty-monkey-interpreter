@@ -28,13 +28,13 @@ pub enum Expression {
     Prefix {
         token: Token,
         operator: String,
-        right: Option<Box<Expression>>,
+        right: Box<Expression>,
     },
     Infix {
         token: Token,
         operator: String,
-        left: Option<Box<Expression>>,
-        right: Option<Box<Expression>>,
+        left: Box<Expression>,
+        right: Box<Expression>,
     },
     Boolean {
         token: Token,
@@ -65,33 +65,14 @@ impl Display for Expression {
             Self::IntegerLiteral { value, .. } => value.to_string(),
             Self::Prefix {
                 operator, right, ..
-            } => {
-                let right_string = if let Some(right) = right {
-                    right.to_string()
-                } else {
-                    "".to_string()
-                };
-                format!("({operator}{right_string})")
-            }
+            } => format!("({operator}{right})"),
+
             Self::Infix {
                 operator,
                 left,
                 right,
                 ..
-            } => {
-                let left_string = if let Some(left) = left {
-                    left.to_string()
-                } else {
-                    "".to_string()
-                };
-
-                let right_string = if let Some(right) = right {
-                    right.to_string()
-                } else {
-                    "".to_string()
-                };
-                format!("({left_string} {operator} {right_string})")
-            }
+            } => format!("({left} {operator} {right})"),
             Self::Boolean { token, .. } => token.literal.clone(),
             Self::If {
                 condition,
@@ -183,15 +164,15 @@ pub enum Statement {
     Let {
         token: Token,
         name: Identifier,
-        value: Option<Expression>, // Temporarily make it an Option while this is WIP.
+        value: Expression,
     },
     Return {
         token: Token,
-        value: Option<Expression>,
+        value: Expression,
     },
     ExpressionStatement {
         token: Token,
-        expression: Option<Expression>,
+        expression: Expression,
     },
     Block(BlockStatement),
 }
@@ -199,31 +180,9 @@ pub enum Statement {
 impl Display for Statement {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         let string = match self {
-            Self::Let { token, name, value } => {
-                let mut string = String::new();
-                string.push_str(format!("{} {} = ", token.literal, name.to_string()).as_str());
-                if let Some(value) = value {
-                    string.push_str(value.to_string().as_str());
-                }
-                string.push(';');
-                string
-            }
-            Self::Return { token, value } => {
-                let mut string = String::new();
-                string.push_str(format!("{} ", token.literal).as_str());
-                if let Some(value) = value {
-                    string.push_str(value.to_string().as_str());
-                }
-                string.push(';');
-                string
-            }
-            Self::ExpressionStatement { expression, .. } => {
-                if let Some(expression) = expression {
-                    expression.to_string()
-                } else {
-                    "".to_string()
-                }
-            }
+            Self::Let { token, name, value } => format!("{} {name} = {value};", token.literal),
+            Self::Return { token, value } => format!("{} {value};", token.literal),
+            Self::ExpressionStatement { expression, .. } => expression.to_string(),
             Self::Block(block_statement) => block_statement.to_string(),
         };
         write!(f, "{string}")
@@ -291,10 +250,10 @@ mod tests {
                     token: Token::new(TokenType::Ident, "myVar".to_string()),
                     value: "myVar".to_string(),
                 },
-                value: Some(Expression::Identifier(Identifier {
+                value: Expression::Identifier(Identifier {
                     token: Token::new(TokenType::Ident, "anotherVar".to_string()),
                     value: "anotherVar".to_string(),
-                })),
+                }),
             }],
         };
 
