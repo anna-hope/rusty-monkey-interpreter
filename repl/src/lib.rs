@@ -1,4 +1,5 @@
 use std::io::{self, Write};
+use std::process;
 
 use interpreter::prelude::{eval_program, Lexer, Parser};
 
@@ -11,6 +12,10 @@ pub fn start() -> io::Result<()> {
 
         let mut buffer = String::new();
         io::stdin().read_line(&mut buffer)?;
+
+        if buffer.trim() == "quit" {
+            process::exit(0);
+        }
 
         let lexer = Lexer::new(buffer);
         let mut parser = Parser::new(lexer);
