@@ -1,11 +1,13 @@
 use std::io::{self, Write};
 use std::process;
 
-use interpreter::prelude::{eval_program, Lexer, Parser};
+use interpreter::prelude::{eval_program, Environment, Lexer, Parser};
 
 const PROMPT: &str = ">> ";
 
 pub fn start() -> io::Result<()> {
+    let mut environment = Environment::new();
+
     loop {
         print!("{PROMPT}");
         io::stdout().flush()?;
@@ -22,7 +24,7 @@ pub fn start() -> io::Result<()> {
 
         match parser.parse_program() {
             Ok(program) => {
-                let evaluated = eval_program(&program);
+                let evaluated = eval_program(&program, &mut environment);
                 println!("{}", evaluated.inspect());
             }
             Err(error) => println!("{error}"),
