@@ -6,7 +6,7 @@ pub trait Node: Display {
     fn token_literal(&self) -> String;
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Identifier {
     pub token: Token,
     pub value: String,
@@ -18,7 +18,7 @@ impl Display for Identifier {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     Identifier(Identifier),
     IntegerLiteral {
@@ -137,7 +137,7 @@ impl Expression {
     fn expression(&self) {}
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct BlockStatement {
     token: Token,
     pub statements: Vec<Statement>,
@@ -159,7 +159,7 @@ impl Display for BlockStatement {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     Let {
         token: Token,

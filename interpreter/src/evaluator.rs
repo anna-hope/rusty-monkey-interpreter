@@ -2,13 +2,13 @@ use std::mem;
 use std::rc::Rc;
 
 use crate::ast::{BlockStatement, Expression, Identifier, Program, Statement};
-use crate::object::{BoxedObject, Environment, Object};
+use crate::object::{BoxedEnvironment, BoxedObject, Environment, Object};
 
 const NULL: Object = Object::Null;
 const TRUE: Object = Object::Boolean(true);
 const FALSE: Object = Object::Boolean(false);
 
-pub fn eval_program(program: &Program, environment: &mut Environment) -> BoxedObject {
+pub fn eval_program(program: &Program, environment: &BoxedEnvironment) -> BoxedObject {
     let mut result = Rc::new(NULL);
 
     for statement in &program.statements {
@@ -24,7 +24,7 @@ pub fn eval_program(program: &Program, environment: &mut Environment) -> BoxedOb
     Rc::clone(&result)
 }
 
-fn eval(statement: &Statement, environment: &mut Environment) -> BoxedObject {
+fn eval(statement: &Statement, environment: &BoxedEnvironment) -> BoxedObject {
     match statement {
         Statement::ExpressionStatement { expression, .. } => {
             eval_expression(expression, environment)
@@ -49,7 +49,7 @@ fn eval(statement: &Statement, environment: &mut Environment) -> BoxedObject {
     }
 }
 
-fn eval_block_statement(block: &BlockStatement, environment: &mut Environment) -> BoxedObject {
+fn eval_block_statement(block: &BlockStatement, environment: &BoxedEnvironment) -> BoxedObject {
     let mut result = Rc::new(NULL);
 
     for statement in &block.statements {
@@ -65,7 +65,7 @@ fn eval_block_statement(block: &BlockStatement, environment: &mut Environment) -
     result
 }
 
-fn eval_expression(expression: &Expression, environment: &mut Environment) -> BoxedObject {
+fn eval_expression(expression: &Expression, environment: &BoxedEnvironment) -> BoxedObject {
     match expression {
         Expression::IntegerLiteral { value, .. } => Rc::new(Object::from(*value)),
         Expression::Boolean { value, .. } => Rc::new(native_bool_to_boolean_object(*value)),
@@ -118,6 +118,13 @@ fn eval_expression(expression: &Expression, environment: &mut Environment) -> Bo
             }
         }
         Expression::Identifier(identifier) => eval_identifier(identifier, environment),
+        Expression::FunctionLiteral {
+            parameters, body, ..
+        } => Rc::new(Object::Function {
+            parameters: parameters.clone(),
+            body: body.clone(),
+            environment: Rc::downgrade(environment),
+        }),
         _ => todo!(),
     }
 }
@@ -218,6 +225,7 @@ fn eval_integer_infix_expression(operator: &str, left: i64, right: i64) -> Objec
 #[cfg(test)]
 mod tests {
     use super::*;
+
     use crate::lexer::Lexer;
     use crate::parser::Parser;
 
@@ -225,8 +233,8 @@ mod tests {
         let lexer = Lexer::new(input.to_string());
         let mut parser = Parser::new(lexer);
         let program = parser.parse_program().unwrap();
-        let mut environment = Environment::new();
-        eval_program(&program, &mut environment)
+        let environment = Rc::new(Environment::new());
+        eval_program(&program, &environment)
     }
 
     fn test_integer_object(object: &Object, expected: i64) {
@@ -414,6 +422,25 @@ if (10 > 1) {
         for (input, expected) in tests {
             let evaluated = run_eval(input);
             test_integer_object(&evaluated, expected);
+        }
+    }
+
+    #[test]
+    fn function_object() {
+        let input = "fn(x) { x + 2; };";
+        let evaluated = run_eval(input);
+
+        match evaluated.as_ref() {
+            Object::Function {
+                parameters, body, ..
+            } => {
+                assert_eq!(parameters.len(), 1);
+                assert_eq!(parameters[0].to_string(), "x");
+
+                let expected_body = "(x + 2)";
+                assert_eq!(body.to_string(), expected_body);
+            }
+            _ => panic!("Object is not Function. Got {evaluated:?}"),
         }
     }
 }
