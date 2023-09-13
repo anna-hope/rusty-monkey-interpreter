@@ -23,6 +23,12 @@ pub struct Function {
     pub environment_key: DefaultKey,
 }
 
+impl Drop for Function {
+    fn drop(&mut self) {
+        ENVIRONMENTS.lock().unwrap().remove(self.environment_key);
+    }
+}
+
 #[derive(Debug, Clone, Default, PartialEq)]
 pub enum Object {
     Integer(i64),
