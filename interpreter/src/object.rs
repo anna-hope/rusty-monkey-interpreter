@@ -1,13 +1,29 @@
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
-use std::rc::{Rc, Weak};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
+
+use lazy_static::lazy_static;
+use slotmap::{DefaultKey, SlotMap};
 
 use crate::ast::{BlockStatement, Identifier};
 
-pub type BoxedObject = Rc<Object>;
+lazy_static! {
+    static ref ENVIRONMENTS: Mutex<SlotMap<DefaultKey, BoxedEnvironment>> =
+        Mutex::new(SlotMap::new());
+}
 
-#[derive(Debug, Clone, Default)]
+pub type BoxedObject = Arc<Object>;
+type BoxedEnvironment = Arc<Environment>;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Function {
+    pub parameters: Vec<Identifier>,
+    pub body: BlockStatement,
+    pub environment_key: DefaultKey,
+}
+
+#[derive(Debug, Clone, Default, PartialEq)]
 pub enum Object {
     Integer(i64),
     Boolean(bool),
@@ -15,11 +31,7 @@ pub enum Object {
     Null,
     ReturnValue(BoxedObject),
     Error(String),
-    Function {
-        parameters: Vec<Identifier>,
-        body: BlockStatement,
-        environment: Weak<Environment>,
-    },
+    Function(Function),
 }
 
 impl Object {
@@ -30,15 +42,14 @@ impl Object {
             Self::Null => "null".to_string(),
             Self::ReturnValue(object) => object.inspect(),
             Self::Error(message) => format!("ERROR: {message}"),
-            Self::Function {
-                parameters, body, ..
-            } => {
-                let parameters = parameters
+            Self::Function(function) => {
+                let parameters = function
+                    .parameters
                     .iter()
                     .map(|x| x.to_string())
                     .collect::<Vec<_>>()
                     .join(", ");
-                format!("fn ({parameters}) {{\n{body}\n}}")
+                format!("fn ({parameters}) {{\n{}\n}}", function.body)
             }
         }
     }
@@ -79,63 +90,55 @@ impl From<i64> for Object {
     }
 }
 
-impl PartialEq for Object {
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Self::Integer(val_left), Self::Integer(val_right)) => val_left == val_right,
-            (Self::Boolean(val_left), Self::Boolean(val_right)) => val_left == val_right,
-            (Self::Null, Self::Null) => true,
-            (Self::ReturnValue(obj_left), Self::ReturnValue(obj_right)) => obj_left == obj_right,
-            (Self::Error(msg_left), Self::Error(msg_right)) => msg_left == msg_right,
-            (
-                Self::Function {
-                    parameters: params_left,
-                    body: body_left,
-                    environment: env_left,
-                },
-                Self::Function {
-                    parameters: params_right,
-                    body: body_right,
-                    environment: env_right,
-                },
-            ) => {
-                let params_eq = params_left == params_right;
-                let body_eq = body_left == body_right;
-                let env_eq = {
-                    if let (Some(env_left), Some(env_right)) =
-                        (env_left.upgrade(), env_right.upgrade())
-                    {
-                        env_left == env_right
-                    } else {
-                        false
-                    }
-                };
-                params_eq && body_eq && env_eq
-            }
-            (_, _) => false,
-        }
-    }
-}
-
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Default)]
 pub struct Environment {
-    store: RefCell<HashMap<String, BoxedObject>>,
+    id: usize,
+    store: Mutex<HashMap<String, BoxedObject>>,
+    outer_key: Option<DefaultKey>,
 }
 
 impl Environment {
     pub fn new() -> Self {
+        static COUNTER: AtomicUsize = AtomicUsize::new(0);
+        let id = COUNTER.fetch_add(1, Ordering::Relaxed);
         Self {
-            store: RefCell::new(HashMap::new()),
+            id,
+            store: Mutex::new(HashMap::new()),
+            outer_key: None,
         }
     }
 
+    pub fn new_enclosed(outer_key: DefaultKey) -> Self {
+        let mut environment = Self::new();
+        environment.outer_key = Some(outer_key);
+        environment
+    }
+
     pub fn get(&self, name: &str) -> Option<BoxedObject> {
-        self.store.borrow().get(name).map(Rc::clone)
+        if let Some(object) = self.store.lock().unwrap().get(name) {
+            Some(Arc::clone(object))
+        } else {
+            let outer = get_environment(self.outer_key?)
+                .expect("Outer environment should exist if the key exists");
+            outer.get(name)
+        }
     }
 
     pub fn set(&self, name: String, value: BoxedObject) {
-        self.store.borrow_mut().insert(name, value);
+        self.store.lock().unwrap().insert(name, value);
     }
 }
 
-pub type BoxedEnvironment = Rc<Environment>;
+impl PartialEq for Environment {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+pub fn add_environment(environment: &BoxedEnvironment) -> DefaultKey {
+    ENVIRONMENTS.lock().unwrap().insert(Arc::clone(environment))
+}
+
+pub fn get_environment(key: DefaultKey) -> Option<BoxedEnvironment> {
+    ENVIRONMENTS.lock().unwrap().get(key).map(Arc::clone)
+}

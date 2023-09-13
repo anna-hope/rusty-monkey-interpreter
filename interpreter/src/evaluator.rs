@@ -1,59 +1,62 @@
 use std::mem;
-use std::rc::Rc;
+use std::sync::Arc;
+
+use slotmap::DefaultKey;
 
 use crate::ast::{BlockStatement, Expression, Identifier, Program, Statement};
-use crate::object::{BoxedEnvironment, BoxedObject, Environment, Object};
+use crate::object::{add_environment, get_environment, BoxedObject, Environment, Function, Object};
 
 const NULL: Object = Object::Null;
 const TRUE: Object = Object::Boolean(true);
 const FALSE: Object = Object::Boolean(false);
 
-pub fn eval_program(program: &Program, environment: &BoxedEnvironment) -> BoxedObject {
-    let mut result = Rc::new(NULL);
+pub fn eval_program(program: &Program, environment_key: DefaultKey) -> BoxedObject {
+    let mut result = Arc::new(NULL);
 
     for statement in &program.statements {
-        result = eval(statement, environment);
+        result = eval(statement, environment_key);
 
         match result.as_ref() {
-            Object::ReturnValue(value) => return Rc::clone(&value),
-            Object::Error(_) => return Rc::clone(&result),
+            Object::ReturnValue(value) => return Arc::clone(&value),
+            Object::Error(_) => return Arc::clone(&result),
             _ => continue,
         }
     }
 
-    Rc::clone(&result)
+    Arc::clone(&result)
 }
 
-fn eval(statement: &Statement, environment: &BoxedEnvironment) -> BoxedObject {
+fn eval(statement: &Statement, environment_key: DefaultKey) -> BoxedObject {
     match statement {
         Statement::ExpressionStatement { expression, .. } => {
-            eval_expression(expression, environment)
+            eval_expression(expression, environment_key)
         }
-        Statement::Block(block) => eval_block_statement(block, environment),
+        Statement::Block(block) => eval_block_statement(block, environment_key),
         Statement::Return { value, .. } => {
-            let value = eval_expression(value, environment);
+            let value = eval_expression(value, environment_key);
             if value.is_error() {
                 value
             } else {
-                Rc::new(Object::ReturnValue(Rc::clone(&value)))
+                Arc::new(Object::ReturnValue(Arc::clone(&value)))
             }
         }
         Statement::Let { value, name, .. } => {
-            let value = eval_expression(value, environment);
+            let value = eval_expression(value, environment_key);
             if value.is_error() {
                 return value;
             }
-            environment.set(name.value.clone(), Rc::clone(&value));
+            let environment = get_environment(environment_key).unwrap();
+            environment.set(name.value.clone(), Arc::clone(&value));
             value
         }
     }
 }
 
-fn eval_block_statement(block: &BlockStatement, environment: &BoxedEnvironment) -> BoxedObject {
-    let mut result = Rc::new(NULL);
+fn eval_block_statement(block: &BlockStatement, environment_key: DefaultKey) -> BoxedObject {
+    let mut result = Arc::new(NULL);
 
     for statement in &block.statements {
-        result = eval(statement, environment);
+        result = eval(statement, environment_key);
 
         if matches!(result.as_ref(), Object::ReturnValue(_))
             || matches!(result.as_ref(), Object::Error(_))
@@ -65,18 +68,18 @@ fn eval_block_statement(block: &BlockStatement, environment: &BoxedEnvironment) 
     result
 }
 
-fn eval_expression(expression: &Expression, environment: &BoxedEnvironment) -> BoxedObject {
+fn eval_expression(expression: &Expression, environment_key: DefaultKey) -> BoxedObject {
     match expression {
-        Expression::IntegerLiteral { value, .. } => Rc::new(Object::from(*value)),
-        Expression::Boolean { value, .. } => Rc::new(native_bool_to_boolean_object(*value)),
+        Expression::IntegerLiteral { value, .. } => Arc::new(Object::from(*value)),
+        Expression::Boolean { value, .. } => Arc::new(native_bool_to_boolean_object(*value)),
         Expression::Prefix {
             operator, right, ..
         } => {
-            let right = eval_expression(right, environment);
+            let right = eval_expression(right, environment_key);
             if right.is_error() {
                 right
             } else {
-                Rc::clone(&eval_prefix_expression(operator, &right))
+                Arc::clone(&eval_prefix_expression(operator, &right))
             }
         }
         Expression::Infix {
@@ -85,17 +88,17 @@ fn eval_expression(expression: &Expression, environment: &BoxedEnvironment) -> B
             right,
             ..
         } => {
-            let left = eval_expression(left, environment);
+            let left = eval_expression(left, environment_key);
             if left.is_error() {
                 return left;
             }
 
-            let right = eval_expression(right, environment);
+            let right = eval_expression(right, environment_key);
             if right.is_error() {
                 return right;
             }
 
-            Rc::new(eval_infix_expression(operator, &left, &right))
+            Arc::new(eval_infix_expression(operator, &left, &right))
         }
         Expression::If {
             condition,
@@ -103,37 +106,79 @@ fn eval_expression(expression: &Expression, environment: &BoxedEnvironment) -> B
             alternative,
             ..
         } => {
-            let condition = eval_expression(condition, environment);
+            let condition = eval_expression(condition, environment_key);
 
             if condition.is_error() {
                 return condition;
             }
 
             if is_truthy(&condition) {
-                Rc::clone(&eval_block_statement(consequence, environment))
+                Arc::clone(&eval_block_statement(consequence, environment_key))
             } else if let Some(alternative) = alternative {
-                Rc::clone(&eval_block_statement(alternative, environment))
+                Arc::clone(&eval_block_statement(alternative, environment_key))
             } else {
-                Rc::new(NULL)
+                Arc::new(NULL)
             }
         }
-        Expression::Identifier(identifier) => eval_identifier(identifier, environment),
+        Expression::Identifier(identifier) => eval_identifier(identifier, environment_key),
         Expression::FunctionLiteral {
             parameters, body, ..
-        } => Rc::new(Object::Function {
-            parameters: parameters.clone(),
-            body: body.clone(),
-            environment: Rc::downgrade(environment),
-        }),
+        } => {
+            let function = Function {
+                parameters: parameters.clone(),
+                body: body.clone(),
+                environment_key,
+            };
+            Arc::new(Object::Function(function))
+        }
+        Expression::Call {
+            function,
+            arguments,
+            ..
+        } => {
+            let function = eval_expression(function, environment_key);
+            if function.is_error() {
+                return function;
+            }
+
+            let args = eval_expressions(arguments, environment_key);
+            if args.len() == 1 && args[0].is_error() {
+                return Arc::clone(&args[0]);
+            }
+
+            if let Object::Function(function) = function.as_ref() {
+                apply_function(function, &args)
+            } else {
+                Arc::new(Object::Error(format!(
+                    "not a function: {}",
+                    function.type_string()
+                )))
+            }
+        }
         _ => todo!(),
     }
 }
 
-fn eval_identifier(node: &Identifier, environment: &Environment) -> BoxedObject {
+fn eval_expressions(expressions: &[Expression], environment_key: DefaultKey) -> Vec<BoxedObject> {
+    let mut result = vec![];
+
+    for expression in expressions {
+        let evaluated = eval_expression(expression, environment_key);
+        if evaluated.is_error() {
+            return vec![evaluated];
+        }
+        result.push(evaluated);
+    }
+
+    result
+}
+
+fn eval_identifier(node: &Identifier, environment_key: DefaultKey) -> BoxedObject {
+    let environment = get_environment(environment_key).unwrap();
     if let Some(value) = environment.get(&node.value) {
         value
     } else {
-        Rc::new(Object::Error(format!(
+        Arc::new(Object::Error(format!(
             "identifier not found: {}",
             node.value
         )))
@@ -155,8 +200,8 @@ fn native_bool_to_boolean_object(input: bool) -> Object {
 fn eval_prefix_expression(operator: &str, right: &Object) -> BoxedObject {
     match operator {
         "!" => eval_bang_operator_expression(right),
-        "-" => Rc::new(eval_minus_prefix_operator_expression(right)),
-        _ => Rc::new(Object::Error(format!(
+        "-" => Arc::new(eval_minus_prefix_operator_expression(right)),
+        _ => Arc::new(Object::Error(format!(
             "unknown operator {operator}{}",
             right.type_string()
         ))),
@@ -175,7 +220,7 @@ fn eval_bang_operator_expression(right: &Object) -> BoxedObject {
         Object::Null => TRUE,
         _ => FALSE,
     };
-    Rc::new(object)
+    Arc::new(object)
 }
 
 fn eval_minus_prefix_operator_expression(right: &Object) -> Object {
@@ -222,6 +267,21 @@ fn eval_integer_infix_expression(operator: &str, left: i64, right: i64) -> Objec
     }
 }
 
+fn apply_function(function: &Function, args: &[BoxedObject]) -> BoxedObject {
+    let extended_env = Arc::new(Environment::new_enclosed(function.environment_key));
+    let extended_env_key = add_environment(&extended_env);
+
+    for (param, arg) in function.parameters.iter().zip(args) {
+        extended_env.set(param.value.clone(), Arc::clone(arg));
+    }
+
+    let evaluated = eval_block_statement(&function.body, extended_env_key);
+    match evaluated.as_ref() {
+        Object::ReturnValue(value) => Arc::clone(value),
+        _ => evaluated,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -233,8 +293,9 @@ mod tests {
         let lexer = Lexer::new(input.to_string());
         let mut parser = Parser::new(lexer);
         let program = parser.parse_program().unwrap();
-        let environment = Rc::new(Environment::new());
-        eval_program(&program, &environment)
+        let environment = Arc::new(Environment::new());
+        let environment_key = add_environment(&environment);
+        eval_program(&program, environment_key)
     }
 
     fn test_integer_object(object: &Object, expected: i64) {
@@ -431,16 +492,44 @@ if (10 > 1) {
         let evaluated = run_eval(input);
 
         match evaluated.as_ref() {
-            Object::Function {
-                parameters, body, ..
-            } => {
-                assert_eq!(parameters.len(), 1);
-                assert_eq!(parameters[0].to_string(), "x");
+            Object::Function(function) => {
+                assert_eq!(function.parameters.len(), 1);
+                assert_eq!(function.parameters[0].to_string(), "x");
 
                 let expected_body = "(x + 2)";
-                assert_eq!(body.to_string(), expected_body);
+                assert_eq!(function.body.to_string(), expected_body);
             }
             _ => panic!("Object is not Function. Got {evaluated:?}"),
         }
+    }
+
+    #[test]
+    fn function_application() {
+        let tests = [
+            ("let identity = fn(x) { x; }; identity(5);", 5),
+            ("let identity = fn(x) { return x; }; identity(5);", 5),
+            ("let double = fn(x) { x * 2; }; double(5);", 10),
+            ("let add = fn(x, y) { x + y; }; add(5, 5);", 10),
+            ("let add = fn(x, y) { x + y; }; add(5 + 5, add(5, 5));", 20),
+            ("fn(x) { x; }(5)", 5),
+        ];
+
+        for (input, expected) in tests {
+            let evaluated = run_eval(input);
+            test_integer_object(&evaluated, expected);
+        }
+    }
+
+    #[test]
+    fn closures() {
+        let input = r#"
+let newAdder = fn(x) {
+     fn(y) { x + y };
+};
+   let addTwo = newAdder(2);
+   addTwo(2);
+"#;
+        let evaluated = run_eval(input);
+        test_integer_object(&evaluated, 4);
     }
 }

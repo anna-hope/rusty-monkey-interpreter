@@ -1,13 +1,14 @@
 use std::io::{self, Write};
 use std::process;
-use std::rc::Rc;
+use std::sync::Arc;
 
-use interpreter::prelude::{eval_program, Environment, Lexer, Parser};
+use interpreter::prelude::{add_environment, eval_program, Environment, Lexer, Parser};
 
 const PROMPT: &str = ">> ";
 
 pub fn start() -> io::Result<()> {
-    let environment = Rc::new(Environment::new());
+    let environment = Arc::new(Environment::new());
+    let environment_key = add_environment(&environment);
 
     loop {
         print!("{PROMPT}");
@@ -25,7 +26,7 @@ pub fn start() -> io::Result<()> {
 
         match parser.parse_program() {
             Ok(program) => {
-                let evaluated = eval_program(&program, &environment);
+                let evaluated = eval_program(&program, environment_key);
                 println!("{}", evaluated.inspect());
             }
             Err(error) => println!("{error}"),
