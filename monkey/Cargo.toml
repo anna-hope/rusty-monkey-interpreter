@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 "repl" = { path = "../repl" }
+"interpreter" = { path = "../interpreter" }
+anyhow = "1"
