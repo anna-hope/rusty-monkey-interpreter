@@ -155,7 +155,6 @@ fn eval_expression(expression: &Expression, environment_key: DefaultKey) -> Boxe
                 )))
             }
         }
-        _ => todo!(),
     }
 }
 
