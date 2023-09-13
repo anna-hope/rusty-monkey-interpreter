@@ -10,20 +10,23 @@ const NULL: Object = Object::Null;
 const TRUE: Object = Object::Boolean(true);
 const FALSE: Object = Object::Boolean(false);
 
-pub fn eval_program(program: &Program, environment_key: DefaultKey) -> BoxedObject {
+pub fn eval_program(program: &Program) -> BoxedObject {
+    let environment = Arc::new(Environment::new());
+    let environment_key = add_environment(&environment);
+
     let mut result = Arc::new(NULL);
 
     for statement in &program.statements {
         result = eval(statement, environment_key);
 
         match result.as_ref() {
-            Object::ReturnValue(value) => return Arc::clone(&value),
-            Object::Error(_) => return Arc::clone(&result),
+            Object::ReturnValue(value) => return Arc::clone(value),
+            Object::Error(_) => return result,
             _ => continue,
         }
     }
 
-    Arc::clone(&result)
+    result
 }
 
 fn eval(statement: &Statement, environment_key: DefaultKey) -> BoxedObject {
@@ -292,9 +295,7 @@ mod tests {
         let lexer = Lexer::new(input.to_string());
         let mut parser = Parser::new(lexer);
         let program = parser.parse_program().unwrap();
-        let environment = Arc::new(Environment::new());
-        let environment_key = add_environment(&environment);
-        eval_program(&program, environment_key)
+        eval_program(&program)
     }
 
     fn test_integer_object(object: &Object, expected: i64) {

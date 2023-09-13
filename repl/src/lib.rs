@@ -1,14 +1,13 @@
 use std::io::{self, Write};
 use std::process;
-use std::sync::Arc;
 
-use interpreter::prelude::{add_environment, eval_program, Environment, Lexer, Parser};
+use interpreter::prelude::{eval_program, Lexer, Parser};
 
 const PROMPT: &str = ">> ";
 
 pub fn start() -> io::Result<()> {
-    let environment = Arc::new(Environment::new());
-    let environment_key = add_environment(&environment);
+    println!("This is the Monkey programming language!");
+    println!("Feel free to type in commands");
 
     loop {
         print!("{PROMPT}");
@@ -26,7 +25,7 @@ pub fn start() -> io::Result<()> {
 
         match parser.parse_program() {
             Ok(program) => {
-                let evaluated = eval_program(&program, environment_key);
+                let evaluated = eval_program(&program);
                 println!("{}", evaluated.inspect());
             }
             Err(error) => println!("{error}"),
